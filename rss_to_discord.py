@@ -47,6 +47,11 @@ FEEDS = {
         "color": 0x00AC4E,
         "icon": "https://www.marketwatch.com/favicon.ico",
     },
+    "ZeroHedge": {
+        "url": "https://cms.zerohedge.com/fullrss2.xml",
+        "color": 0xFC6404,
+        "icon": "https://www.zerohedge.com/favicon.ico",
+    },
     "Investing.com News": {
         "url": "https://www.investing.com/rss/news.rss",
         "color": 0x1A5276,
@@ -101,13 +106,57 @@ def prune_seen(days=7):
         }
 
 
+def extract_image(entry):
+    """Try to pull an image URL from the RSS entry."""
+    # media:content or media:thumbnail (most common)
+    if "media_content" in entry:
+        for media in entry["media_content"]:
+            url = media.get("url", "")
+            if url and any(ext in url.lower() for ext in [".jpg", ".jpeg", ".png", ".webp", ".gif"]):
+                return url
+    if "media_thumbnail" in entry:
+        for thumb in entry["media_thumbnail"]:
+            url = thumb.get("url", "")
+            if url:
+                return url
+
+    # og:image style in <enclosure>
+    if "links" in entry:
+        for link in entry["links"]:
+            if link.get("type", "").startswith("image/"):
+                return link.get("href", "")
+
+    # Image tag buried in summary HTML
+    summary = entry.get("summary", "")
+    img_match = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', summary)
+    if img_match:
+        return img_match.group(1)
+
+    return None
+
+
+def clean_description(entry):
+    """Extract a clean text snippet from the entry."""
+    desc = entry.get("summary", "") or entry.get("description", "")
+    # Strip HTML tags
+    desc = re.sub(r"<[^>]+>", "", desc)
+    # Collapse whitespace
+    desc = re.sub(r"\s+", " ", desc).strip()
+    # Trim to ~400 chars at a sentence boundary
+    if len(desc) > 400:
+        cut = desc[:400].rfind(". ")
+        if cut > 100:
+            desc = desc[:cut + 1]
+        else:
+            desc = desc[:400] + "…"
+    return desc
+
+
 def post_to_discord(entry, feed_name, feed_cfg):
     title = entry.get("title", "No title")[:256]
     link  = entry.get("link", "")
-    desc  = entry.get("summary", "")
-    desc = re.sub(r"<[^>]+>", "", desc)[:300]
-    if len(desc) == 300:
-        desc += "…"
+    desc  = clean_description(entry)
+    image = extract_image(entry)
 
     embed = {
         "title": title,
@@ -120,6 +169,9 @@ def post_to_discord(entry, feed_name, feed_cfg):
         },
         "timestamp": datetime.utcnow().isoformat(),
     }
+
+    if image:
+        embed["image"] = {"url": image}
 
     payload = {"embeds": [embed]}
 
