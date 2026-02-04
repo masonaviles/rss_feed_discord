@@ -1,0 +1,4 @@
+.env
+.rss_seen_articles.json
+venv/
+__pycache__/

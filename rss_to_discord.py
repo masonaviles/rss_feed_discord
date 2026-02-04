@@ -17,7 +17,10 @@ from datetime import datetime, timedelta
 
 # ─── CONFIGURATION ───────────────────────────────────────────────────────────
 
-DISCORD_WEBHOOK_URL = "https://discordapp.com/api/webhooks/1468411374605697188/TfPOrtsDiV2tHsIEF2t04ht3wQDG47P1gshdyrpwZYHbTD_dA9pxVDo2nexSlVr1syd-"
+from dotenv import load_dotenv
+load_dotenv()
+
+DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", "")
 
 POLL_INTERVAL = 300        # seconds between feed checks (5 min)
 MAX_PER_FEED  = 3          # max articles to post per feed per cycle
@@ -192,9 +195,9 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
-    if DISCORD_WEBHOOK_URL == "YOUR_WEBHOOK_URL_HERE":
-        print("❌ ERROR: Set your Discord webhook URL in the script first!")
-        print("   Edit DISCORD_WEBHOOK_URL at the top of the file.")
+    if not DISCORD_WEBHOOK_URL:
+        print("❌ ERROR: DISCORD_WEBHOOK_URL not set!")
+        print("   Create a .env file with: DISCORD_WEBHOOK_URL=your_url_here")
         sys.exit(1)
 
     webhook_preview = DISCORD_WEBHOOK_URL[-30:]
@@ -209,14 +212,12 @@ def main():
     had_existing = load_seen()
 
     if not had_existing:
-        print("\n🚀 First run — posting 1 latest article per feed...")
-        total = 0
+        print("\n📡 First run — indexing existing articles (no posts)...")
         for name, cfg in FEEDS.items():
-            count = check_feed(name, cfg, post=True, limit=1)
-            total += count
+            check_feed(name, cfg, post=False)
         save_seen()
-        print(f"\n📬 First run complete — posted {total} articles")
-        print(f"   Future cycles will only post NEW articles.\n")
+        count = sum(len(v) for v in seen_articles.values())
+        print(f"   Indexed {count} articles. Only NEW articles will be posted.\n")
     else:
         count = sum(len(v) for v in seen_articles.values())
         print(f"\n📂 Loaded {count} tracked articles, watching for new ones...\n")
