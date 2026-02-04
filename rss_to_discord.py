@@ -106,31 +106,68 @@ def prune_seen(days=7):
         }
 
 
+def upscale_image_url(url):
+    """Swap tiny thumbnails for larger versions where possible."""
+    # Investing.com: 108x81 → 800x533
+    if "i-invdn-com.investing.com" in url:
+        url = re.sub(r"_\d+x\d+\.", "_800x533.", url)
+    return url
+
+
+def fetch_og_image(url):
+    """Fallback: fetch the article page and grab the og:image meta tag."""
+    if not url:
+        return None
+    try:
+        r = requests.get(url, timeout=5, headers={"User-Agent": "Mozilla/5.0"})
+        if r.status_code == 200:
+            match = re.search(
+                r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']',
+                r.text[:50000]
+            )
+            if not match:
+                # Some sites flip the attribute order
+                match = re.search(
+                    r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']',
+                    r.text[:50000]
+                )
+            if match:
+                return match.group(1)
+    except requests.RequestException:
+        pass
+    return None
+
+
 def extract_image(entry):
-    """Try to pull an image URL from the RSS entry."""
+    """Try to pull an image URL from the RSS entry, fallback to og:image."""
     # media:content or media:thumbnail (most common)
     if "media_content" in entry:
         for media in entry["media_content"]:
             url = media.get("url", "")
             if url and any(ext in url.lower() for ext in [".jpg", ".jpeg", ".png", ".webp", ".gif"]):
-                return url
+                return upscale_image_url(url)
     if "media_thumbnail" in entry:
         for thumb in entry["media_thumbnail"]:
             url = thumb.get("url", "")
             if url:
-                return url
+                return upscale_image_url(url)
 
     # og:image style in <enclosure>
     if "links" in entry:
         for link in entry["links"]:
             if link.get("type", "").startswith("image/"):
-                return link.get("href", "")
+                return upscale_image_url(link.get("href", ""))
 
     # Image tag buried in summary HTML
     summary = entry.get("summary", "")
     img_match = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', summary)
     if img_match:
-        return img_match.group(1)
+        return upscale_image_url(img_match.group(1))
+
+    # Fallback: fetch the article page for og:image
+    og = fetch_og_image(entry.get("link", ""))
+    if og:
+        return upscale_image_url(og)
 
     return None
 
