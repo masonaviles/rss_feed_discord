@@ -1,0 +1,15 @@
+[Unit]
+Description=Trading Discord Bots (RSS + Market Sessions)
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/trading-discord-bots
+ExecStart=/home/ubuntu/trading-discord-bots/venv/bin/python run.py
+Restart=always
+RestartSec=10
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
